@@ -5,7 +5,7 @@
   gather_facts: yes
 
   vars:
-    service_name: "{{ service_name | default('nginx') }}"
+    target_service: "{{ service_name | default('nginx') }}"
     max_retries: 3
     retry_delay: 10
 
@@ -29,12 +29,12 @@
 
     - name: Check current service status
       ansible.builtin.systemd:
-        name: "{{ service_name }}"
+        name: "{{ target_service }}"
       register: svc_pre
 
     - name: Log pre-remediation state
       ansible.builtin.debug:
-        msg: "Service {{ service_name }} is {{ svc_pre.status.ActiveState }}"
+        msg: "Service {{ target_service }} is {{ svc_pre.status.ActiveState }}"
 
     # ------------------------------------------------------------------
     # Step 3 - Restart service with retries
@@ -42,7 +42,7 @@
 
     - name: Restart the service
       ansible.builtin.systemd:
-        name: "{{ service_name }}"
+        name: "{{ target_service }}"
         state: restarted
       register: restart_result
       retries: "{{ max_retries }}"
@@ -63,7 +63,7 @@
 
     - name: Verify service is active
       ansible.builtin.systemd:
-        name: "{{ service_name }}"
+        name: "{{ target_service }}"
       register: svc_post
       failed_when: svc_post.status.ActiveState != "active"
 
@@ -76,7 +76,7 @@
         cmd: mysql -u monitor -p'Monitor@2026' -e "SELECT 1 AS health;"
       register: health
       changed_when: false
-      when: service_name in ["mysql", "mysqld"]
+      when: target_service in ["mysql", "mysqld"]
 
     # ------------------------------------------------------------------
     # Step 7 - Nginx health check
@@ -87,7 +87,7 @@
         url: http://localhost
         status_code: 200
       register: nginx_health
-      when: service_name == "nginx"
+      when: target_service == "nginx"
 
     # ------------------------------------------------------------------
     # Step 8 - Log remediation result
@@ -95,4 +95,4 @@
 
     - name: Log remediation result
       ansible.builtin.debug:
-        msg: "Service {{ service_name }} is now {{ svc_post.status.ActiveState }}"
+        msg: "Service {{ target_service }} is now {{ svc_post.status.ActiveState }}"
