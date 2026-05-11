@@ -1,0 +1,127 @@
+---
+
+- name: Auto-heal - restart failed service
+
+  hosts: localhost
+
+  connection: local
+
+  become: yes
+
+  gather_facts: yes
+
+  vars:
+
+    service_name: "{{ service_name | default('nginx') }}"
+
+    max_retries: 3
+
+    retry_delay: 10
+
+ 
+
+  tasks:
+
+    # Step 1: Check current state
+
+    - name: Check current service status
+
+      ansible.builtin.systemd:
+
+        name: "{{ service_name }}"
+
+      register: svc_pre
+
+ 
+
+    - name: Log pre-remediation state
+
+      ansible.builtin.debug:
+
+        msg: "Service {{ service_name }} is {{ svc_pre.status.ActiveState }}"
+
+ 
+
+    # Step 2: Restart with retries
+
+    - name: Restart the service
+
+      ansible.builtin.systemd:
+
+        name: "{{ service_name }}"
+
+        state: restarted
+
+      register: restart_result
+
+      retries: "{{ max_retries }}"
+
+      delay: "{{ retry_delay }}"
+
+      until: restart_result is succeeded
+
+ 
+
+    # Step 3: Wait for stabilisation
+
+    - name: Wait for service to stabilise
+
+      ansible.builtin.pause:
+
+        seconds: 10
+
+ 
+
+    # Step 4: Verify service is running
+
+    - name: Verify service is active
+
+      ansible.builtin.systemd:
+
+        name: "{{ service_name }}"
+
+      register: svc_post
+
+      failed_when: svc_post.status.ActiveState != "active"
+
+ 
+
+    # Step 5: Health check for MySQL
+
+    - name: Run MySQL health check
+
+      ansible.builtin.command:
+
+        cmd: mysql -u monitor -p'Monitor@2026' -e "SELECT 1 AS health;"
+
+      register: health
+
+      changed_when: false
+
+      when: service_name in ["mysql", "mysqld"]
+
+ 
+
+    # Step 6: Health check for Nginx
+
+    - name: Run Nginx health check
+
+      ansible.builtin.uri:
+
+        url: http://localhost
+
+        status_code: 200
+
+      register: nginx_health
+
+      when: service_name == "nginx"
+
+ 
+
+    # Step 7: Log result
+
+    - name: Log remediation result
+
+      ansible.builtin.debug:
+
+        msg: "Service {{ service_name }} is now {{ svc_post.status.ActiveState }}"
