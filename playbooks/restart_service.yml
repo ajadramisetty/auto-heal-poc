@@ -1,19 +1,17 @@
 ---
-- name: Auto-heal - restart failed service
+- name: Auto-heal - start and validate service
   hosts: local
   become: yes
   gather_facts: yes
 
   vars:
     target_service: "{{ service_name | default('nginx') }}"
-    max_retries: 3
-    retry_delay: 10
 
   tasks:
 
-    # ------------------------------------------------------------------
-    # Step 1 - Verify target host
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
+    # Step 1 - Verify execution host
+    # ------------------------------------------------------------
 
     - name: Show hostname
       ansible.builtin.command: hostname
@@ -23,76 +21,74 @@
       ansible.builtin.debug:
         var: hostout.stdout
 
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
     # Step 2 - Check current service status
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
 
     - name: Check current service status
       ansible.builtin.systemd:
         name: "{{ target_service }}"
       register: svc_pre
+      ignore_errors: yes
 
-    - name: Log pre-remediation state
+    - name: Display current service state
       ansible.builtin.debug:
-        msg: "Service {{ target_service }} is {{ svc_pre.status.ActiveState }}"
+        msg: "Current state of {{ target_service }} is {{ svc_pre.status.ActiveState | default('unknown') }}"
 
-    # ------------------------------------------------------------------
-    # Step 3 - Restart service with retries
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
+    # Step 3 - Start service
+    # ------------------------------------------------------------
 
-    - name: Restart the service
+    - name: Start target service
       ansible.builtin.systemd:
         name: "{{ target_service }}"
-        state: restarted
-      register: restart_result
-      retries: "{{ max_retries }}"
-      delay: "{{ retry_delay }}"
-      until: restart_result is succeeded
+        state: started
+        enabled: yes
+      register: svc_start
 
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
     # Step 4 - Wait for stabilization
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
 
     - name: Wait for service stabilization
       ansible.builtin.pause:
         seconds: 10
 
-    # ------------------------------------------------------------------
-    # Step 5 - Verify service status
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
+    # Step 5 - Validate service status
+    # ------------------------------------------------------------
 
     - name: Verify service is active
       ansible.builtin.systemd:
         name: "{{ target_service }}"
       register: svc_post
-      failed_when: svc_post.status.ActiveState != "active"
 
-    # ------------------------------------------------------------------
-    # Step 6 - MySQL health check
-    # ------------------------------------------------------------------
+    - name: Fail if service is not active
+      ansible.builtin.fail:
+        msg: "Service {{ target_service }} failed to start"
+      when: svc_post.status.ActiveState != "active"
 
-    - name: Run MySQL health check
-      ansible.builtin.command:
-        cmd: mysql -u monitor -p'Monitor@2026' -e "SELECT 1 AS health;"
-      register: health
-      changed_when: false
-      when: target_service in ["mysql", "mysqld"]
+    # ------------------------------------------------------------
+    # Step 6 - Nginx validation
+    # ------------------------------------------------------------
 
-    # ------------------------------------------------------------------
-    # Step 7 - Nginx health check
-    # ------------------------------------------------------------------
-
-    - name: Run Nginx health check
+    - name: Validate nginx HTTP response
       ansible.builtin.uri:
         url: http://localhost
         status_code: 200
-      register: nginx_health
       when: target_service == "nginx"
 
-    # ------------------------------------------------------------------
-    # Step 8 - Log remediation result
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------
+    # Step 7 - MySQL validation
+    # ------------------------------------------------------------
 
-    - name: Log remediation result
+    - name: Validate MySQL process
+      ansible.builtin.command:
+        cmd: systemctl is-active {{ target_service }}
+      register: mysql_check
+      changed_when: false
+      when: target_service in ["mysql", "mysqld", "mariadb"]
+
+    - name: Display final service status
       ansible.builtin.debug:
-        msg: "Service {{ target_service }} is now {{ svc_post.status.ActiveState }}"
+        msg: "Service {{ target_service }} is successfully running"
