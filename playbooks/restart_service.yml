@@ -7,10 +7,6 @@
 
   vars:
     target_service: "nginx"
-    snow_instance: "{{ snow_instance | default('') }}"
-    snow_user: "{{ snow_user | default('') }}"
-    snow_password: "{{ snow_password | default('') }}"
-    snow_incident_number: "{{ snow_incident_number | default('') }}"
 
   tasks:
 
