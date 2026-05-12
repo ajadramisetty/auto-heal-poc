@@ -1,11 +1,16 @@
 ---
 - name: Auto-heal - nginx service
+
   hosts: local
   become: yes
   gather_facts: yes
 
   vars:
     target_service: "nginx"
+    snow_instance: "{{ snow_instance | default('') }}"
+    snow_user: "{{ snow_user | default('') }}"
+    snow_password: "{{ snow_password | default('') }}"
+    snow_incident_number: "{{ snow_incident_number | default('') }}"
 
   tasks:
 
@@ -36,7 +41,16 @@
         msg: "Current state of nginx is {{ svc_pre.status.ActiveState | default('unknown') }}"
 
     # ------------------------------------------------------------
-    # Step 3 - Ensure nginx log directory exists
+    # Step 3 - Demo delay for visibility
+    # ------------------------------------------------------------
+
+    - name: Delay for demo visibility
+      ansible.builtin.pause:
+        seconds: 60
+        prompt: ">>> Waiting 60 seconds for demo visibility before remediation..."
+
+    # ------------------------------------------------------------
+    # Step 4 - Ensure nginx log directory exists
     # ------------------------------------------------------------
 
     - name: Ensure nginx log directory exists
@@ -59,7 +73,7 @@
         - /var/log/nginx/access.log
 
     # ------------------------------------------------------------
-    # Step 4 - Start nginx service
+    # Step 5 - Start nginx service
     # ------------------------------------------------------------
 
     - name: Start nginx service
@@ -70,7 +84,7 @@
       register: svc_start
 
     # ------------------------------------------------------------
-    # Step 5 - Wait for stabilization
+    # Step 6 - Wait for stabilization
     # ------------------------------------------------------------
 
     - name: Wait for nginx stabilization
@@ -78,7 +92,7 @@
         seconds: 10
 
     # ------------------------------------------------------------
-    # Step 6 - Verify nginx status
+    # Step 7 - Verify nginx status
     # ------------------------------------------------------------
 
     - name: Verify nginx is active
@@ -92,7 +106,7 @@
       when: svc_post.status.ActiveState != "active"
 
     # ------------------------------------------------------------
-    # Step 7 - Validate nginx HTTP response
+    # Step 8 - Validate nginx HTTP response
     # ------------------------------------------------------------
 
     - name: Validate nginx HTTP response
@@ -101,7 +115,7 @@
         status_code: 200
 
     # ------------------------------------------------------------
-    # Step 8 - Display final status
+    # Step 9 - Display final status
     # ------------------------------------------------------------
 
     - name: Display final nginx status
@@ -109,7 +123,7 @@
         msg: "nginx service is successfully running"
 
     # ------------------------------------------------------------
-    # Step 9 - ServiceNow Incident Lookup
+    # Step 10 - ServiceNow Incident Lookup
     # ------------------------------------------------------------
 
     - name: Get incident sys_id from ServiceNow
@@ -126,7 +140,7 @@
       when: snow_incident_number | default('') | length > 0
 
     # ------------------------------------------------------------
-    # Step 10 - Resolve ServiceNow Incident
+    # Step 11 - Resolve ServiceNow Incident
     # ------------------------------------------------------------
 
     - name: Resolve the SNOW incident
