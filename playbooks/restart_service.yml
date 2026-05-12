@@ -1,11 +1,11 @@
 ---
-- name: Auto-heal - start and validate service
+- name: Auto-heal - nginx service
   hosts: local
   become: yes
   gather_facts: yes
 
   vars:
-    target_service: "{{ service_name | default('nginx') }}"
+    target_service: "nginx"
 
   tasks:
 
@@ -22,32 +22,47 @@
         var: hostout.stdout
 
     # ------------------------------------------------------------
-    # Step 2 - Display selected target service
+    # Step 2 - Check current nginx status
     # ------------------------------------------------------------
 
-    - name: Display selected target service
-      ansible.builtin.debug:
-        msg: "Target service is {{ target_service }}"
-
-    # ------------------------------------------------------------
-    # Step 3 - Check current service status
-    # ------------------------------------------------------------
-
-    - name: Check current service status
+    - name: Check nginx service status
       ansible.builtin.systemd:
         name: "{{ target_service }}"
       register: svc_pre
       ignore_errors: yes
 
-    - name: Display current service state
+    - name: Display nginx current state
       ansible.builtin.debug:
-        msg: "Current state of {{ target_service }} is {{ svc_pre.status.ActiveState | default('unknown') }}"
+        msg: "Current state of nginx is {{ svc_pre.status.ActiveState | default('unknown') }}"
 
     # ------------------------------------------------------------
-    # Step 4 - Start target service
+    # Step 3 - Ensure nginx log directory exists
     # ------------------------------------------------------------
 
-    - name: Start target service
+    - name: Ensure nginx log directory exists
+      ansible.builtin.file:
+        path: /var/log/nginx
+        state: directory
+        owner: www-data
+        group: www-data
+        mode: '0755'
+
+    - name: Ensure nginx log files exist
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: touch
+        owner: www-data
+        group: www-data
+        mode: '0644'
+      loop:
+        - /var/log/nginx/error.log
+        - /var/log/nginx/access.log
+
+    # ------------------------------------------------------------
+    # Step 4 - Start nginx service
+    # ------------------------------------------------------------
+
+    - name: Start nginx service
       ansible.builtin.systemd:
         name: "{{ target_service }}"
         state: started
@@ -58,54 +73,84 @@
     # Step 5 - Wait for stabilization
     # ------------------------------------------------------------
 
-    - name: Wait for service stabilization
+    - name: Wait for nginx stabilization
       ansible.builtin.pause:
-        seconds: "{{ 20 if target_service in ['mysql', 'mysqld', 'mariadb'] else 10 }}"
+        seconds: 10
 
     # ------------------------------------------------------------
-    # Step 6 - Verify service status
+    # Step 6 - Verify nginx status
     # ------------------------------------------------------------
 
-    - name: Verify service is active
+    - name: Verify nginx is active
       ansible.builtin.systemd:
         name: "{{ target_service }}"
       register: svc_post
 
-    - name: Fail if service is not active
+    - name: Fail if nginx is not active
       ansible.builtin.fail:
-        msg: "Service {{ target_service }} failed to start"
+        msg: "nginx failed to start"
       when: svc_post.status.ActiveState != "active"
 
     # ------------------------------------------------------------
-    # Step 7 - Nginx validation
+    # Step 7 - Validate nginx HTTP response
     # ------------------------------------------------------------
 
     - name: Validate nginx HTTP response
       ansible.builtin.uri:
         url: http://localhost
         status_code: 200
-      when: target_service == "nginx"
 
     # ------------------------------------------------------------
-    # Step 8 - MySQL validation
+    # Step 8 - Display final status
     # ------------------------------------------------------------
 
-    - name: Validate MySQL process
-      ansible.builtin.command:
-        cmd: systemctl is-active {{ target_service }}
-      register: mysql_check
-      changed_when: false
-      when: target_service in ["mysql", "mysqld", "mariadb"]
-
-    - name: Display MySQL validation result
+    - name: Display final nginx status
       ansible.builtin.debug:
-        var: mysql_check.stdout
-      when: target_service in ["mysql", "mysqld", "mariadb"]
+        msg: "nginx service is successfully running"
 
     # ------------------------------------------------------------
-    # Step 9 - Final status
+    # Step 9 - ServiceNow Incident Lookup
     # ------------------------------------------------------------
 
-    - name: Display final service status
-      ansible.builtin.debug:
-        msg: "Service {{ target_service }} is successfully running"
+    - name: Get incident sys_id from ServiceNow
+      ansible.builtin.uri:
+        url: "{{ snow_instance }}/api/now/table/incident?sysparm_query=number={{ snow_incident_number }}"
+        method: GET
+        user: "{{ snow_user }}"
+        password: "{{ snow_password }}"
+        force_basic_auth: yes
+        return_content: yes
+        headers:
+          Accept: application/json
+      register: snow_get
+      when: snow_incident_number | default('') | length > 0
+
+    # ------------------------------------------------------------
+    # Step 10 - Resolve ServiceNow Incident
+    # ------------------------------------------------------------
+
+    - name: Resolve the SNOW incident
+      ansible.builtin.uri:
+        url: "{{ snow_instance }}/api/now/table/incident/{{ snow_get.json.result[0].sys_id }}"
+        method: PATCH
+        user: "{{ snow_user }}"
+        password: "{{ snow_password }}"
+        force_basic_auth: yes
+        headers:
+          Content-Type: application/json
+          Accept: application/json
+        body_format: json
+        body:
+          state: "6"
+          close_code: "Solved (Permanently)"
+          close_notes: >-
+            Auto-healed by Ansible via Semaphore.
+            nginx restarted on {{ ansible_hostname }}
+            at {{ ansible_date_time.iso8601 }}.
+          work_notes: >-
+            [Auto-Heal] nginx remediation completed successfully.
+            Service is now active.
+        status_code: 200
+      when:
+        - snow_incident_number | default('') | length > 0
+        - snow_get.json.result | length > 0
