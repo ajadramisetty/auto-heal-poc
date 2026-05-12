@@ -7,6 +7,9 @@
 
   vars:
     target_service: "nginx"
+    snow_instance: "https://dev396422.service-now.com"
+    snow_user: "dynatrace.integration"
+    snow_password: "Ruch1ita@1208"
 
   tasks:
 
@@ -119,12 +122,12 @@
         msg: "nginx service is successfully running"
 
     # ------------------------------------------------------------
-    # Step 10 - ServiceNow Incident Lookup
+    # Step 10 - Find latest open Auto-Heal incident
     # ------------------------------------------------------------
 
-    - name: Get incident sys_id from ServiceNow
+    - name: Find latest open Auto-Heal incident
       ansible.builtin.uri:
-        url: "{{ snow_instance }}/api/now/table/incident?sysparm_query=number={{ snow_incident_number }}"
+        url: "{{ snow_instance }}/api/now/table/incident?sysparm_query=assignment_group.name=Auto-Heal^short_descriptionLIKEnginx^state=1^ORDERBYDESCsys_created_on&sysparm_limit=1"
         method: GET
         user: "{{ snow_user }}"
         password: "{{ snow_password }}"
@@ -133,7 +136,11 @@
         headers:
           Accept: application/json
       register: snow_get
-      when: snow_incident_number | default('') | length > 0
+
+    - name: Display found incident
+      ansible.builtin.debug:
+        msg: "Found incident: {{ snow_get.json.result[0].number | default('NONE') }}"
+      when: snow_get.json.result | length > 0
 
     # ------------------------------------------------------------
     # Step 11 - Resolve ServiceNow Incident
@@ -162,5 +169,4 @@
             Service is now active.
         status_code: 200
       when:
-        - snow_incident_number | default('') | length > 0
         - snow_get.json.result | length > 0
