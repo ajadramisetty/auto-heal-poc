@@ -1,0 +1,88 @@
+---
+- name: Auto-heal MySQL service
+  hosts: local
+  become: yes
+  gather_facts: yes
+
+  tasks:
+
+    # ------------------------------------------------------------
+    # Step 1 - Show execution host
+    # ------------------------------------------------------------
+
+    - name: Show hostname
+      ansible.builtin.command: hostname
+      register: hostout
+
+    - name: Display hostname
+      ansible.builtin.debug:
+        var: hostout.stdout
+
+    # ------------------------------------------------------------
+    # Step 2 - Check MySQL service state
+    # ------------------------------------------------------------
+
+    - name: Check MySQL status
+      ansible.builtin.systemd:
+        name: mysql
+      register: mysql_pre
+      ignore_errors: yes
+
+    - name: Display MySQL current state
+      ansible.builtin.debug:
+        msg: "MySQL state is {{ mysql_pre.status.ActiveState | default('unknown') }}"
+
+    # ------------------------------------------------------------
+    # Step 3 - Start MySQL service
+    # ------------------------------------------------------------
+
+    - name: Start MySQL service
+      ansible.builtin.systemd:
+        name: mysql
+        state: started
+        enabled: yes
+      register: mysql_start
+
+    # ------------------------------------------------------------
+    # Step 4 - Wait for stabilization
+    # ------------------------------------------------------------
+
+    - name: Wait for MySQL stabilization
+      ansible.builtin.pause:
+        seconds: 20
+
+    # ------------------------------------------------------------
+    # Step 5 - Verify MySQL status
+    # ------------------------------------------------------------
+
+    - name: Verify MySQL is active
+      ansible.builtin.systemd:
+        name: mysql
+      register: mysql_post
+
+    - name: Fail if MySQL is not active
+      ansible.builtin.fail:
+        msg: "MySQL failed to start"
+      when: mysql_post.status.ActiveState != "active"
+
+    # ------------------------------------------------------------
+    # Step 6 - Validate MySQL process
+    # ------------------------------------------------------------
+
+    - name: Validate MySQL process
+      ansible.builtin.command:
+        cmd: systemctl is-active mysql
+      register: mysql_check
+      changed_when: false
+
+    - name: Display MySQL validation
+      ansible.builtin.debug:
+        var: mysql_check.stdout
+
+    # ------------------------------------------------------------
+    # Step 7 - Final result
+    # ------------------------------------------------------------
+
+    - name: Display final MySQL state
+      ansible.builtin.debug:
+        msg: "MySQL service successfully started"
