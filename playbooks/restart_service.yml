@@ -22,7 +22,15 @@
         var: hostout.stdout
 
     # ------------------------------------------------------------
-    # Step 2 - Check current service status
+    # Step 2 - Display selected target service
+    # ------------------------------------------------------------
+
+    - name: Display selected target service
+      ansible.builtin.debug:
+        msg: "Target service is {{ target_service }}"
+
+    # ------------------------------------------------------------
+    # Step 3 - Check current service status
     # ------------------------------------------------------------
 
     - name: Check current service status
@@ -36,7 +44,7 @@
         msg: "Current state of {{ target_service }} is {{ svc_pre.status.ActiveState | default('unknown') }}"
 
     # ------------------------------------------------------------
-    # Step 3 - Start service
+    # Step 4 - Start target service
     # ------------------------------------------------------------
 
     - name: Start target service
@@ -47,15 +55,15 @@
       register: svc_start
 
     # ------------------------------------------------------------
-    # Step 4 - Wait for stabilization
+    # Step 5 - Wait for stabilization
     # ------------------------------------------------------------
 
     - name: Wait for service stabilization
       ansible.builtin.pause:
-        seconds: 10
+        seconds: "{{ 20 if target_service in ['mysql', 'mysqld', 'mariadb'] else 10 }}"
 
     # ------------------------------------------------------------
-    # Step 5 - Validate service status
+    # Step 6 - Verify service status
     # ------------------------------------------------------------
 
     - name: Verify service is active
@@ -69,7 +77,7 @@
       when: svc_post.status.ActiveState != "active"
 
     # ------------------------------------------------------------
-    # Step 6 - Nginx validation
+    # Step 7 - Nginx validation
     # ------------------------------------------------------------
 
     - name: Validate nginx HTTP response
@@ -79,7 +87,7 @@
       when: target_service == "nginx"
 
     # ------------------------------------------------------------
-    # Step 7 - MySQL validation
+    # Step 8 - MySQL validation
     # ------------------------------------------------------------
 
     - name: Validate MySQL process
@@ -88,6 +96,15 @@
       register: mysql_check
       changed_when: false
       when: target_service in ["mysql", "mysqld", "mariadb"]
+
+    - name: Display MySQL validation result
+      ansible.builtin.debug:
+        var: mysql_check.stdout
+      when: target_service in ["mysql", "mysqld", "mariadb"]
+
+    # ------------------------------------------------------------
+    # Step 9 - Final status
+    # ------------------------------------------------------------
 
     - name: Display final service status
       ansible.builtin.debug:
