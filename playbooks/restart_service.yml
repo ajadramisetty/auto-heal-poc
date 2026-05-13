@@ -8,8 +8,8 @@
   vars:
     target_service: "nginx"
     snow_instance: "https://dev396422.service-now.com"
-    snow_user: "dynatrace.integration"
-    snow_password: "Ruch1ita@1208"
+    snow_user: "admin"
+    snow_password: "v9gNUb6@/eJI"
 
   tasks:
 
