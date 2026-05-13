@@ -127,7 +127,7 @@
 
     - name: Find latest open Auto-Heal incident
       ansible.builtin.uri:
-        url: "{{ snow_instance }}/api/now/table/incident?sysparm_query=assignment_group.name=Auto-Heal^short_descriptionLIKEnginx^state=1^sys_created_onONToday@javascript:gs.beginningOfToday()@javascript:gs.endOfToday()^ORDERBYDESCsys_created_on&sysparm_limit=1"
+        url: "{{ snow_instance }}/api/now/table/incident?sysparm_query=assignment_group.name=Auto-Heal^short_descriptionLIKEnginx^state=1^ORDERBYDESCsys_created_on&sysparm_limit=1"
         method: GET
         user: "{{ snow_user }}"
         password: "{{ snow_password }}"
