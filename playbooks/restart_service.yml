@@ -159,8 +159,7 @@
         body_format: json
         body:
           state: "6"
-          close_code: "Solved (Permanently)"
-          resolution_code: "Solved (Permanently)"
+          close_code: "Solution provided"
           close_notes: >-
             Auto-healed by Ansible via Semaphore.
             nginx restarted on {{ ansible_hostname }}
