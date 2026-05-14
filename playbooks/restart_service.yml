@@ -45,7 +45,7 @@
 
     - name: Delay for demo visibility
       ansible.builtin.pause:
-        seconds: 60
+        seconds: 160
         prompt: ">>> Waiting 60 seconds for demo visibility before remediation..."
 
     # ------------------------------------------------------------
